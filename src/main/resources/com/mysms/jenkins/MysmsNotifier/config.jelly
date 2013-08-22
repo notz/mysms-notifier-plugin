@@ -11,11 +11,11 @@
      <f:checkbox name="sendToCulprits" checked="${descriptor.sendToCulprits}" />
    </f:entry>
    <f:entry title="Culprit message" field="culpritMessage">
-        <f:textbox/>
+        <f:textarea/>
    </f:entry>
   
    <f:entry title="Message" field="message">
-        <f:textbox/>
+        <f:textarea/>
    </f:entry>
   
    <f:entry title="Only send message on failure or recovery?" field="onlyOnFailureOrRecovery">
