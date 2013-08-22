@@ -269,8 +269,7 @@ public class MysmsNotifier extends Notifier {
                     
                     StringBuilder artifactsStringBuilder = new StringBuilder();
                     for (@SuppressWarnings("rawtypes") Artifact artifact : build.getArtifacts()) {
-                    	artifactsStringBuilder.append(artifact.getFileName())
-                    		.append(": ")
+                    	artifactsStringBuilder.append(getDescriptor().getUrl())
                     		.append(artifact.getHref())
                     		.append("\n");
                     }
