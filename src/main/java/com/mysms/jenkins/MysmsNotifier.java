@@ -3,6 +3,7 @@ package com.mysms.jenkins;
 import hudson.Extension;
 import hudson.Functions;
 import hudson.Launcher;
+import hudson.model.Action;
 import hudson.model.BuildListener;
 import hudson.model.Result;
 import hudson.model.AbstractBuild;
@@ -263,32 +264,43 @@ public class MysmsNotifier extends Notifier {
             if (shouldNotify(build)) {
                 
                 if (build != null) {
-                    substitutionAttributes.put("%PROJECT%", build.getProject().getDisplayName());
+                    substitutionAttributes.put("%PROJECT%", build.getProject().getFullDisplayName());
                     substitutionAttributes.put("%BUILD%", build.getDisplayName());
                     substitutionAttributes.put("%STATUS%", build.getResult().toString());
                     
-                    StringBuilder artifactsStringBuilder = new StringBuilder();
-                    for (@SuppressWarnings("rawtypes") Artifact artifact : build.getArtifacts()) {
-                    	artifactsStringBuilder.append(getDescriptor().getUrl())
-                    		.append(artifact.getHref())
-                    		.append("\n");
+                    if (this.message.contains("%ARTIFACTS%") && build.getArtifacts() != null) {
+    	                StringBuilder artifactsStringBuilder = new StringBuilder();
+	                    for (@SuppressWarnings("rawtypes") Artifact artifact : build.getArtifacts()) {
+	                    	artifactsStringBuilder  
+	                    	    .append("\n")
+	                    	    .append(artifact.getFileName())
+	                    		.append(":\n")
+	                    		.append(createTinyUrl(getDescriptor().getUrl() + build.getUrl() + "artifact/" + artifact.getHref()))
+	                    		.append("\n");
+	                    }
+	                    substitutionAttributes.put("%ARTIFACTS%", artifactsStringBuilder.toString());
                     }
-                    substitutionAttributes.put("%ARTIFACTS%", artifactsStringBuilder.toString());
+                    
+                    if (this.message.contains("%TESTFLIGHT_INSTALLS%") && build.getActions() != null) {
+	                    StringBuilder testflightInstallLinksStringBuilder = new StringBuilder();
+	                    for (Action action : build.getActions()) {
+	                    	if (action.getUrlName() == null || !action.getUrlName().contains("testflightapp.com/install/")) continue;
+	                    	testflightInstallLinksStringBuilder
+	                    	    .append("\n")
+	                    	    .append(action.getDisplayName())
+	                    		.append(":\n")
+	                    		.append(createTinyUrl(action.getUrlName()))
+	                    		.append("\n");
+	                    }
+	                    substitutionAttributes.put("%TESTFLIGHT_INSTALLS%", testflightInstallLinksStringBuilder.toString());
+	                }
                 }
                
                 List<String> culpritList = getCulpritList(build, listener.getLogger());
                 listener.getLogger().println("Culprits: " + culpritList.size());
                 listener.getLogger().println("Culprits: " + culpritList);
-                substitutionAttributes.put("%CULPRITS%", build.getResult().toString());
-
-                List<NameValuePair> phoneToCulprits = new ArrayList<NameValuePair>();
-                for (String culprit : culpritList) {
-                    NameValuePair userPair = userToPhoneMap.get(culprit);
-                    if (userPair != null) {
-                        phoneToCulprits.add(userPair);
-                    }
-                }
-                substitutionAttributes.put("%CULPRITS%", culpritStringFromList(phoneToCulprits));
+                
+                substitutionAttributes.put("%CULPRITS%", culpritStringFromList(culpritList));
 
                 final String[] recipientArray = getToList().split(",");
 
@@ -306,6 +318,15 @@ public class MysmsNotifier extends Notifier {
                 }
 
                 if (sendToCulprits) {
+                	
+                	List<NameValuePair> phoneToCulprits = new ArrayList<NameValuePair>();
+                    for (String culprit : culpritList) {
+                        NameValuePair userPair = userToPhoneMap.get(culprit);
+                        if (userPair != null) {
+                            phoneToCulprits.add(userPair);
+                        }
+                    }
+                	
                     for (final NameValuePair phoneToCulprit : phoneToCulprits) {
                         final String absoluteBuildURL = getDescriptor().getUrl() + build.getUrl();
                         String recipient = phoneToCulprit.getValue();
@@ -337,21 +358,20 @@ public class MysmsNotifier extends Notifier {
         return true;
     }
 
-    protected static String culpritStringFromList(List<NameValuePair> phoneToCulprit) {
+    protected static String culpritStringFromList(List<String> culpritList) {
         String result = "";
-        if (phoneToCulprit.size() == 1) {
-            result = phoneToCulprit.get(0).getName();
+        if (culpritList.size() == 1) {
+            result = culpritList.get(0);
         } else {
-
-            int c = phoneToCulprit.size() - 1;
-            for (NameValuePair pair : phoneToCulprit) {
-                if (c == (phoneToCulprit.size() - 1)) {
-                    result = pair.getName();
+            int c = culpritList.size() - 1;
+            for (String name : culpritList) {
+                if (c == (culpritList.size() - 1)) {
+                    result = name;
                 } else {
                     if (c != 0) {
-                        result = result + " " + pair.getName();
+                        result = result + ", " + name;
                     } else {
-                        result = result + " and " + pair.getName();
+                        result = result + " and " + name;
                     }
                 }
                 c--;
@@ -446,7 +466,6 @@ public class MysmsNotifier extends Notifier {
         final ChangeLogSet<? extends Entry> changeSet = build.getChangeSet();
         if (culprits.size() > 0) {
             for (final User user : culprits) {
-
                 culpritList.add(user.getId());
             }
         } else if (changeSet != null) {
@@ -468,13 +487,14 @@ public class MysmsNotifier extends Notifier {
      */
     private static String createTinyUrl(final String url) throws IOException {
         final HttpClient client = new HttpClient();
-        final GetMethod getMethod = new GetMethod("http://tinyurl.com/api-create.php?url=" + url.replace(" ", "%20"));
+        final GetMethod getMethod = new GetMethod("http://is.gd/create.php?format=simple&url=" + url.replace(" ", "%20"));
 
         final int status = client.executeMethod(getMethod);
         if (status == HttpStatus.SC_OK) {
             return getMethod.getResponseBodyAsString(1024);
         } else {
-            throw new IOException("Non-OK response code back from tinyurl: " + status);
+        	// Non-OK response code back from is.gd: " + status
+        	return url;
         }
     }
 
